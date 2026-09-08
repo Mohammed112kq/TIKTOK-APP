@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TikTok OAuth Redirect</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap">
+<style>
+  :root {
+    --bg: #0a0c12;
+    --bg-glow-a: rgba(254,44,85,.10);
+    --bg-glow-b: rgba(37,244,238,.10);
+    --panel: #141a2b;
+    --panel-2: #0f1320;
+    --inset: #0c0f17;
+    --line: rgba(148,163,184,.16);
+    --ink: #e7ecf5;
+    --ink-dim: #8b96ad;
+    --ink-faint: #5b6478;
+    --accent: #25f4ee;
+    --ok: #34d399;
+    --wait: #fbbf24;
+    --err: #fb7185;
+    --radius: 18px;
+    --shadow: 0 20px 60px rgba(0,0,0,.45);
+    --font-display: "Sora", system-ui, -apple-system, "Segoe UI", sans-serif;
+    --font-mono: "JetBrains Mono", ui-monospace, "Cascadia Mono", Consolas, monospace;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    min-height: 100vh;
+    background:
+      radial-gradient(900px 460px at 88% -8%, var(--bg-glow-a), transparent 62%),
+      radial-gradient(820px 420px at -8% 108%, var(--bg-glow-b), transparent 60%),
+      var(--bg);
+    color: var(--ink);
+    font-family: var(--font-display);
+    display: flex; align-items: center; justify-content: center;
+    padding: 40px 20px; line-height: 1.55;
+  }
+  .panel {
+    width: 100%; max-width: 560px;
+    background: linear-gradient(180deg, var(--panel), var(--panel-2));
+    border: 1px solid var(--line); border-radius: var(--radius);
+    box-shadow: var(--shadow); padding: 34px 34px 28px;
+  }
+  .kicker {
+    display: flex; align-items: center; gap: 9px; font-size: 12px; font-weight: 600;
+    letter-spacing: .06em; text-transform: uppercase; color: var(--ink-dim); margin-bottom: 22px;
+  }
+  .kicker .sq { width: 8px; height: 8px; border-radius: 2px; background: var(--accent);
+    box-shadow: 0 0 10px rgba(37,244,238,.7); flex: 0 0 auto; }
+  .status-row { display: flex; align-items: flex-start; gap: 14px; margin-bottom: 6px; }
+  .status-glyph { flex: 0 0 auto; width: 42px; height: 42px; border-radius: 12px;
+    display: grid; place-items: center; font-size: 20px; border: 1px solid var(--line); }
+  .status-glyph.wait { background: rgba(251,191,36,.10); color: var(--wait); border-color: rgba(251,191,36,.35); }
+  .status-glyph.ok   { background: rgba(52,211,153,.12); color: var(--ok);   border-color: rgba(52,211,153,.4); }
+  .status-glyph.err  { background: rgba(251,113,133,.10); color: var(--err); border-color: rgba(251,113,133,.35); }
+  h1 { font-size: 21px; font-weight: 700; text-wrap: balance; padding-top: 4px; }
+  .sub-en { font-size: 12.5px; color: var(--ink-faint); margin-top: 3px; font-weight: 500; }
+  p.lede { color: var(--ink-dim); font-size: 13.5px; margin: 16px 0 0; max-width: 60ch; }
+  .field { margin-top: 22px; }
+  .field .lab { font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: uppercase;
+    color: var(--ink-faint); margin-bottom: 8px; display: flex; justify-content: space-between; align-items: center; }
+  .code-box { background: var(--inset); border: 1px solid var(--line); border-radius: 11px;
+    padding: 14px 16px; font-family: var(--font-mono); font-size: 14px; color: var(--accent);
+    word-break: break-all; direction: ltr; text-align: left; }
+  .code-box.small { font-size: 12.5px; color: var(--ink-dim); padding: 10px 14px; }
+  .copy-btn { font-family: var(--font-display); font-size: 11.5px; font-weight: 600; cursor: pointer;
+    background: transparent; border: 1px solid var(--line); color: var(--ink-dim);
+    border-radius: 999px; padding: 4px 12px; transition: border-color .15s, color .15s, background .15s; }
+  .copy-btn:hover { border-color: rgba(37,244,238,.5); color: var(--accent); }
+  .copy-btn.copied { border-color: rgba(52,211,153,.5); color: var(--ok); }
+  .steps { margin-top: 22px; padding: 14px 16px; border: 1px dashed var(--line); border-radius: 12px;
+    background: rgba(148,163,184,.04); font-size: 13px; color: var(--ink-dim); }
+  .steps b { color: var(--ink); }
+  footer { margin-top: 28px; padding-top: 18px; border-top: 1px solid var(--line);
+    font-size: 11.5px; color: var(--ink-faint); display: flex; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+</style>
+</head>
+<body>
+<div class="panel" id="panel"></div>
+<script>
+(function () {
+  var params = new URLSearchParams(location.search);
+  var code = params.get("code");
+  var state = params.get("state");
+  var error = params.get("error");
+  var errorDesc = params.get("error_description");
+  function esc(s) {
+    return String(s == null ? "" : s).replace(/[&<>"']/g, function (c) {
+      return { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c];
+    });
+  }
+  var panel = document.getElementById("panel");
+  var html = '<div class="kicker"><span class="sq"></span>TikTok Growth Toolkit &middot; Redirect URI</div>';
+  if (error) {
+    html +=
+      '<div class="status-row"><div class="status-glyph err">&#10005;</div>' +
+      '<div><h1>تعذّر التفويض</h1><div class="sub-en">Authorization failed</div></div></div>' +
+      '<p class="lede">تيك توك رجع بخطأ بدل كود تفويض. جرّب "احصل على رابط التفويض" من جديد من تبويب الإعدادات.</p>' +
+      '<div class="field"><div class="lab">error</div><div class="code-box small">' + esc(error) + '</div></div>' +
+      (errorDesc ? '<div class="field"><div class="lab">error_description</div><div class="code-box small">' + esc(errorDesc) + '</div></div>' : '');
+  } else if (code) {
+    html +=
+      '<div class="status-row"><div class="status-glyph ok">&#10003;</div>' +
+      '<div><h1>تم استلام كود التفويض</h1><div class="sub-en">Authorization code received</div></div></div>' +
+      '<p class="lede">انسخ الكود أدناه والصقه في تبويب <b style="color:var(--ink)">الإعدادات</b> بأداة TikTok Growth Toolkit، بخانة "الصق الكود (code) هنا"، ثم اضغط اتصال.</p>' +
+      '<div class="field"><div class="lab">code <button type="button" class="copy-btn" id="copy-code">نسخ</button></div>' +
+      '<div class="code-box" id="code-val">' + esc(code) + '</div></div>' +
+      (state ? '<div class="field"><div class="lab">state (للتحقق فقط — اختياري)</div><div class="code-box small">' + esc(state) + '</div></div>' : '') +
+      '<div class="steps"><b>تذكير:</b> هذا الكود صالح لمرة واحدة ولمدة قصيرة — استخدمه بأقرب وقت.</div>';
+  } else {
+    html +=
+      '<div class="status-row"><div class="status-glyph wait">&#8635;</div>' +
+      '<div><h1>بانتظار كود التفويض</h1><div class="sub-en">Waiting for an authorization code</div></div></div>' +
+      '<p class="lede">هذه صفحة إعادة التوجيه المسجَّلة في تطبيقك على TikTok for Developers. الكود سيظهر هنا تلقائيًا فور موافقتك على صفحة التفويض.</p>' +
+      '<div class="steps">من تبويب <b>الإعدادات</b> بأداة TikTok Growth Toolkit: اضغط "احصل على رابط التفويض" ← وافق على حسابك ← هذي الصفحة تفتح تلقائيًا ومعها الكود.</div>';
+  }
+  panel.innerHTML = html;
+  var copyBtn = document.getElementById("copy-code");
+  if (copyBtn) {
+    copyBtn.addEventListener("click", function () {
+      var val = document.getElementById("code-val").textContent;
+      function done(ok) {
+        copyBtn.textContent = ok ? "تم النسخ ✓" : "انسخ يدويًا";
+        copyBtn.classList.toggle("copied", ok);
+        setTimeout(function () { copyBtn.textContent = "نسخ"; copyBtn.classList.remove("copied"); }, 1800);
+      }
+      if (navigator.clipboard && navigator.clipboard.writeText) {
+        navigator.clipboard.writeText(val).then(function () { done(true); }).catch(function () { done(false); });
+      } else {
+        try {
+          var range = document.createRange();
+          range.selectNodeContents(document.getElementById("code-val"));
+          var sel = window.getSelection();
+          sel.removeAllRanges(); sel.addRange(range);
+          done(document.execCommand("copy"));
+        } catch (e) { done(false); }
+      }
+    });
+  }
+  var f = document.createElement("footer");
+  f.innerHTML = '<span>TikTok Growth Toolkit</span><span>صفحة ثابتة — لا تُرسل أي بيانات لأي خادم</span>';
+  panel.appendChild(f);
+})();
+</script>
+</body>
+</html>
